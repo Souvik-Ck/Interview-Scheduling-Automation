@@ -1,15 +1,11 @@
 /**
-* @Company           : Cloudkaptan
-* @description       :
-* @author            : Souvik Sen
-* @group             :
-* @last modified on  : 01-01-2025
-* @last modified by  : ChangeMeIn@UserSettingsUnder.SFDoc
-* Modifications Log
-* Ver   Date         Author          Modification
-* 1.0   12-31-2024   Souvik Sen   Initial Version
+ * @description       : 
+ * @author            : Souvik Sen
+ * @group             : 
+ * @last modified on  : 01-02-2025
+ * @last modified by  : Souvik Sen
 **/
- 
+
 public with sharing class JobApplicationStatusRuleMetadata {
     public String ruleName;
     public Integer daysSinceLastActivity;
@@ -37,7 +33,8 @@ public with sharing class JobApplicationStatusRuleMetadata {
                 Candidate_no_longer_interested__c,
                 Active__c
             FROM Rule__mdt
-            WHERE Active__c = true]) {
+            WHERE Active__c = true
+            WITH SYSTEM_MODE]) {
             
             JobApplicationStatusRuleMetadata ruleMetadata = new JobApplicationStatusRuleMetadata();
             ruleMetadata.ruleName = rule.RuleName__c;
