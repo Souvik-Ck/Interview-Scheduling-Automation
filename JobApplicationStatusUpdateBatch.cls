@@ -1,14 +1,28 @@
 /**
-* Batch Apex class to update Job Application statuses based on configured rules
-* @author Souvik Sen
-* @date 2024-11-27
-*/
+ * @Company           : Cloudkaptan Consultancy Services Pvt. Ltd.
+ * @description       : Batch Apex class for update Job Application statuses based on configured rules
+ * @author            : Souvik Sen
+ * @testclass         : 
+ * @last modified on  : 01-02-2025
+ * @last modified by  : Souvik Sen
+ * Modifications Log
+ * Ver   Date         Author            Modification
+ * 1.0   12-18-2024   Souvik Sen   Initial Version
+**/
 public with sharing class JobApplicationStatusUpdateBatch implements Database.Batchable<Job_Application__c>, Database.Stateful {
+    
     // Batch execution statistics
     private Integer recordsProcessed = 0;
     private Integer recordsUpdated = 0;
  
-    public List<Job_Application__c> start(Database.BatchableContext BC) {
+    /**
+    * @description Retrieves job applications that match the statuses defined in the active rules.
+    * @author Souvik Sen | 12-18-2024 
+    * @param bc 
+    * @return List<Job_Application__c> 
+    **/
+    public List<Job_Application__c> start(Database.BatchableContext bc) {
+
         // Retrieve active rules
         List<JobApplicationStatusRuleMetadata> activeRules = JobApplicationStatusRuleMetadata.getActiveRules();
         
@@ -31,64 +45,110 @@ public with sharing class JobApplicationStatusUpdateBatch implements Database.Ba
         return jobApplicationsToProcess;
     }
  
-    public void execute(Database.BatchableContext BC, List<Job_Application__c> scope) {
+    /**
+     * @description Processes a batch of job applications, evaluates conditions from rules, and updates their statuses accordingly.
+     * @param       bc Database.BatchableContext - Provides runtime context about the batch job.
+     * @param       scope List<Job_Application__c> - A batch of job applications to process.
+     **/
+    public void execute(Database.BatchableContext bc, List<Job_Application__c> scope) {
         List<Job_Application__c> jobApplicationsToUpdate = new List<Job_Application__c>();
         List<JobApplicationStatusRuleMetadata> activeRules = JobApplicationStatusRuleMetadata.getActiveRules();
- 
+
         for (Job_Application__c jobApplication : scope) {
-            for (JobApplicationStatusRuleMetadata rule : activeRules) {
-                Boolean shouldUpdate = false;
- 
-                // Inactive Job Application Rule
-                if (rule.daysSinceLastActivity != null &&
-                    jobApplication.Job_Activity_Date__c != null &&
-                    jobApplication.Status__c == rule.currentStatus) {
-                    Integer daysSinceLastActivity = jobApplication.Job_Activity_Date__c.daysBetween(System.today());
-                    shouldUpdate = daysSinceLastActivity >= rule.daysSinceLastActivity;
-                }
- 
-                // Not Selected After Interview Rule
-                if (rule.daysSinceInterview != null &&
-                    jobApplication.Job_Interview_Date__c != null &&
-                    jobApplication.Status__c == rule.currentStatus) {
-                    Integer daysSinceInterview = jobApplication.Job_Interview_Date__c.daysBetween(System.today());
-                    shouldUpdate = daysSinceInterview >= rule.daysSinceInterview;
-                }
- 
-                // Withdrawn Rule
-                if (rule.candidateNoLongerInterested &&
-                    jobApplication.Candidate_No_Longer_Interested__c &&
-                    jobApplication.Status__c == rule.currentStatus) {
-                    shouldUpdate = true;
-                }
- 
-                // Update job application if rule conditions are met
-                if (shouldUpdate) {
-                    jobApplication.Status__c = rule.newStatus;
-                    jobApplicationsToUpdate.add(jobApplication);
-                    recordsUpdated++;
-                    break;  // Apply only the first matching rule
-                }
-            }
+            processJobApplication(jobApplication, activeRules, jobApplicationsToUpdate);
             recordsProcessed++;
         }
- 
-        // Perform updates with partial success
+
+        // Perform the update if there are changes
         if (!jobApplicationsToUpdate.isEmpty()) {
-            List<Database.SaveResult> saveResults = Database.update(jobApplicationsToUpdate, false);
-            
-            // Log any errors during update
-            for (Database.SaveResult result : saveResults) {
-                if (!result.isSuccess()) {
-                    for (Database.Error error : result.getErrors()) {
-                        System.debug('Error updating job application: ' + error.getMessage());
-                    }
-                }
+            update jobApplicationsToUpdate;
+        }
+    }
+
+    /**
+     * @description Processes an individual job application by evaluating rules and determining if it needs an update.
+     * @param       jobApplication Job_Application__c - The job application to process.
+     * @param       activeRules List<JobApplicationStatusRuleMetadata> - The list of active rules.
+     * @param       jobApplicationsToUpdate List<Job_Application__c> - The list of job applications to be updated.
+     **/
+    private void processJobApplication(
+        Job_Application__c jobApplication,
+        List<JobApplicationStatusRuleMetadata> activeRules,
+        List<Job_Application__c> jobApplicationsToUpdate
+    ) {
+        for (JobApplicationStatusRuleMetadata rule : activeRules) {
+            if (evaluateRule(jobApplication, rule)) {
+                jobApplication.Status__c = rule.newStatus;
+                jobApplicationsToUpdate.add(jobApplication);
+                recordsUpdated++;
+                break; // Apply only the first matching rule
             }
         }
     }
- 
-    public void finish(Database.BatchableContext BC) {
+
+    /**
+     * @description Evaluates a job application against a single rule to determine if it should be updated.
+     * @param       jobApplication Job_Application__c - The job application to evaluate.
+     * @param       rule JobApplicationStatusRuleMetadata - The rule to evaluate against.
+     * @return      Boolean - True if the job application meets the rule's criteria, false otherwise.
+     **/
+    private Boolean evaluateRule(Job_Application__c jobApplication, JobApplicationStatusRuleMetadata rule) {
+        return meetsLastActivityRule(jobApplication, rule) ||
+            meetsInterviewRule(jobApplication, rule) ||
+            meetsWithdrawalRule(jobApplication, rule);
+    }
+
+    /**
+     * @description Checks if the job application meets the "Last Activity" rule criteria.
+     * @param       jobApplication Job_Application__c - The job application to evaluate.
+     * @param       rule JobApplicationStatusRuleMetadata - The rule to evaluate against.
+     * @return      Boolean - True if the job application meets the "Last Activity" criteria, false otherwise.
+     **/
+    private Boolean meetsLastActivityRule(Job_Application__c jobApplication, JobApplicationStatusRuleMetadata rule) {
+        if (rule.daysSinceLastActivity != null &&
+            jobApplication.Job_Activity_Date__c != null &&
+            jobApplication.Status__c == rule.currentStatus) {
+            Integer daysSinceLastActivity = jobApplication.Job_Activity_Date__c.daysBetween(System.today());
+            return daysSinceLastActivity >= rule.daysSinceLastActivity;
+        }
+        return false;
+    }
+
+    /**
+     * @description Checks if the job application meets the "Interview" rule criteria.
+     * @param       jobApplication Job_Application__c - The job application to evaluate.
+     * @param       rule JobApplicationStatusRuleMetadata - The rule to evaluate against.
+     * @return      Boolean - True if the job application meets the "Interview" criteria, false otherwise.
+     **/
+    private Boolean meetsInterviewRule(Job_Application__c jobApplication, JobApplicationStatusRuleMetadata rule) {
+        if (rule.daysSinceInterview != null &&
+            jobApplication.Job_Interview_Date__c != null &&
+            jobApplication.Status__c == rule.currentStatus) {
+            Integer daysSinceInterview = jobApplication.Job_Interview_Date__c.daysBetween(System.today());
+            return daysSinceInterview >= rule.daysSinceInterview;
+        }
+        return false;
+    }
+
+    /**
+     * @description Checks if the job application meets the "Withdrawal" rule criteria.
+     * @param       jobApplication Job_Application__c - The job application to evaluate.
+     * @param       rule JobApplicationStatusRuleMetadata - The rule to evaluate against.
+     * @return      Boolean - True if the job application meets the "Withdrawal" criteria, false otherwise.
+     **/
+    private Boolean meetsWithdrawalRule(Job_Application__c jobApplication, JobApplicationStatusRuleMetadata rule) {
+        return rule.candidateNoLongerInterested &&
+            jobApplication.Candidate_No_Longer_Interested__c &&
+            jobApplication.Status__c == rule.currentStatus;
+    }
+
+   /**
+     * @description finish method 
+     * @param       jobApplication Job_Application__c - The job application to evaluate.
+     * @param       rule JobApplicationStatusRuleMetadata - The rule to evaluate against.
+     * @return      Boolean - True if the job application meets the "Withdrawal" criteria, false otherwise.     
+     **/
+    public void finish(Database.BatchableContext bc) {
         // Optional: Send email or log summary
         System.debug('Batch Job Summary:');
         System.debug('Total Records Processed: ' + recordsProcessed);
