@@ -1,6 +1,6 @@
 /**
 * Test class for Job Application Status Update Batch and related components
-* @author AbhibhabMitra
+* @author Souvik Sen
 * @date 2024-11-27
 */
 @isTest
@@ -76,4 +76,4 @@ private class JobApplicationStatusUpdateBatchTest {
             'Expected the job to be scheduled');
     }
 }
- 
+  
